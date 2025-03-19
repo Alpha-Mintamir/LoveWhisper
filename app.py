@@ -26,7 +26,7 @@ ai_handler = AIHandler()
 
 # Get environment variables
 PORT = int(os.environ.get('PORT', 8080))
-WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'https://your-app-name.onrender.com')
+WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'https://lovewhisper-5vbu.onrender.com')
 
 # Initialize bot application
 application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -55,15 +55,18 @@ async def webhook():
 def index():
     return 'Bot is running!'
 
-# Setup webhook
-@app.before_first_request
+# Setup webhook function
 def setup_webhook():
-    """Set up the webhook on startup."""
+    """Set up the webhook."""
     url = f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}"
     bot = Bot(token=TELEGRAM_TOKEN)
     bot.delete_webhook()
     bot.set_webhook(url=url)
     logger.info(f"Webhook set to {url}")
+
+# Call setup_webhook when the app starts
+with app.app_context():
+    setup_webhook()
 
 if __name__ == '__main__':
     # Run the Flask app
