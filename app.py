@@ -6,6 +6,9 @@ from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, InlineQueryHandler
 import time
 import threading
+import traceback
+from quart import Quart
+import nest_asyncio
 
 from config import TELEGRAM_TOKEN, RESPONSE_STYLES
 from user_manager import UserManager
@@ -19,8 +22,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
-app = Flask(__name__)
+# Apply nest_asyncio to allow nested event loops
+nest_asyncio.apply()
+
+# Use Quart instead of Flask for better async support
+app = Quart(__name__)
 
 # Initialize user manager and AI handler
 user_manager = UserManager()
@@ -33,6 +39,12 @@ WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'https://lovewhisper-5vbu.onrender.c
 # Initialize bot application
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 
+# Error handler
+async def error_handler(update, context):
+    """Log the error and send a message to the user."""
+    logger.error(f"Exception while handling an update: {context.error}")
+    logger.error(traceback.format_exc())
+
 # Add handlers
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("help", help_command))
@@ -42,33 +54,40 @@ application.add_handler(CommandHandler("adddetail", add_detail_command))
 application.add_handler(CallbackQueryHandler(button_callback))
 application.add_handler(InlineQueryHandler(inline_query))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+application.add_error_handler(error_handler)
 
 # Initialize the application
 async def initialize_application():
     await application.initialize()
+    logger.info("Application initialized successfully")
 
 # Run the initialization in the main thread
-asyncio.run(initialize_application())
+try:
+    asyncio.run(initialize_application())
+    logger.info("Application initialization completed")
+except Exception as e:
+    logger.error(f"Error initializing application: {e}")
+    logger.error(traceback.format_exc())
 
-# Webhook route - now synchronous
+# Webhook route - fully async
 @app.route(f'/{TELEGRAM_TOKEN}', methods=['POST'])
-def webhook():
+async def webhook():
     """Handle incoming webhook updates from Telegram."""
-    if request.method == "POST":
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        
-        # Process update in the background
-        def process_update():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(application.process_update(update))
-            loop.close()
-        
-        thread = threading.Thread(target=process_update)
-        thread.daemon = True
-        thread.start()
-        
-    return Response('ok', status=200)
+    try:
+        if request.method == "POST":
+            logger.info("Received webhook request")
+            update_json = await request.get_json(force=True)
+            logger.info(f"Update JSON: {update_json}")
+            
+            update = Update.de_json(update_json, application.bot)
+            await application.process_update(update)
+            logger.info("Update processed successfully")
+            
+        return Response('ok', status=200)
+    except Exception as e:
+        logger.error(f"Error in webhook handler: {e}")
+        logger.error(traceback.format_exc())
+        return Response('error', status=500)
 
 # Health check route
 @app.route('/')
@@ -78,11 +97,20 @@ def index():
 # Set up the webhook using the Telegram Bot API directly
 def set_webhook_sync():
     """Set up webhook using requests (synchronous)."""
-    import requests
-    url = f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}"
-    api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={url}"
-    response = requests.get(api_url)
-    logger.info(f"Webhook set to {url}. Response: {response.text}")
+    try:
+        import requests
+        url = f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}"
+        api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={url}"
+        response = requests.get(api_url)
+        logger.info(f"Webhook set to {url}. Response: {response.text}")
+        
+        # Also check if the bot can connect to Telegram API
+        me_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getMe"
+        me_response = requests.get(me_url)
+        logger.info(f"Bot info: {me_response.text}")
+    except Exception as e:
+        logger.error(f"Error setting webhook: {e}")
+        logger.error(traceback.format_exc())
 
 # Call the synchronous version at startup
 set_webhook_sync()
