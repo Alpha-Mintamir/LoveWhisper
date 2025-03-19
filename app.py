@@ -5,6 +5,7 @@ import asyncio
 from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, InlineQueryHandler
 import time
+import threading
 
 from config import TELEGRAM_TOKEN, RESPONSE_STYLES
 from user_manager import UserManager
@@ -42,28 +43,29 @@ application.add_handler(CallbackQueryHandler(button_callback))
 application.add_handler(InlineQueryHandler(inline_query))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# Webhook route
+# Create an event loop for async operations
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+# Webhook route - now synchronous
 @app.route(f'/{TELEGRAM_TOKEN}', methods=['POST'])
-async def webhook():
+def webhook():
     """Handle incoming webhook updates from Telegram."""
     if request.method == "POST":
         update = Update.de_json(request.get_json(force=True), application.bot)
-        await application.process_update(update)
+        
+        # Process update in the background
+        def process_update():
+            asyncio.run(application.process_update(update))
+        
+        threading.Thread(target=process_update).start()
+        
     return Response('ok', status=200)
 
 # Health check route
 @app.route('/')
 def index():
     return 'Bot is running!'
-
-# Setup webhook function
-async def setup_webhook():
-    """Set up the webhook asynchronously."""
-    url = f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}"
-    bot = Bot(token=TELEGRAM_TOKEN)
-    await bot.delete_webhook()
-    await bot.set_webhook(url=url)
-    logger.info(f"Webhook set to {url}")
 
 # Set up the webhook using the Telegram Bot API directly
 def set_webhook_sync():
