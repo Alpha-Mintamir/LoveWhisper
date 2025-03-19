@@ -43,9 +43,12 @@ application.add_handler(CallbackQueryHandler(button_callback))
 application.add_handler(InlineQueryHandler(inline_query))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# Create an event loop for async operations
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
+# Initialize the application
+async def initialize_application():
+    await application.initialize()
+
+# Run the initialization in the main thread
+asyncio.run(initialize_application())
 
 # Webhook route - now synchronous
 @app.route(f'/{TELEGRAM_TOKEN}', methods=['POST'])
@@ -56,9 +59,14 @@ def webhook():
         
         # Process update in the background
         def process_update():
-            asyncio.run(application.process_update(update))
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(application.process_update(update))
+            loop.close()
         
-        threading.Thread(target=process_update).start()
+        thread = threading.Thread(target=process_update)
+        thread.daemon = True
+        thread.start()
         
     return Response('ok', status=200)
 
