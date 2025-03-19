@@ -1,13 +1,11 @@
-from flask import Flask, request, Response
 import logging
 import os
 import asyncio
 from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, InlineQueryHandler
 import time
-import threading
 import traceback
-from quart import Quart
+from quart import Quart, request, Response
 import nest_asyncio
 
 from config import TELEGRAM_TOKEN, RESPONSE_STYLES
@@ -25,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Apply nest_asyncio to allow nested event loops
 nest_asyncio.apply()
 
-# Use Quart instead of Flask for better async support
+# Use Quart for async support
 app = Quart(__name__)
 
 # Initialize user manager and AI handler
@@ -74,15 +72,14 @@ except Exception as e:
 async def webhook():
     """Handle incoming webhook updates from Telegram."""
     try:
-        if request.method == "POST":
-            logger.info("Received webhook request")
-            update_json = await request.get_json(force=True)
-            logger.info(f"Update JSON: {update_json}")
-            
-            update = Update.de_json(update_json, application.bot)
-            await application.process_update(update)
-            logger.info("Update processed successfully")
-            
+        logger.info("Received webhook request")
+        update_json = await request.get_json()
+        logger.info(f"Update JSON: {update_json}")
+        
+        update = Update.de_json(update_json, application.bot)
+        await application.process_update(update)
+        logger.info("Update processed successfully")
+        
         return Response('ok', status=200)
     except Exception as e:
         logger.error(f"Error in webhook handler: {e}")
@@ -91,7 +88,7 @@ async def webhook():
 
 # Health check route
 @app.route('/')
-def index():
+async def index():
     return 'Bot is running!'
 
 # Set up the webhook using the Telegram Bot API directly
@@ -112,9 +109,26 @@ def set_webhook_sync():
         logger.error(f"Error setting webhook: {e}")
         logger.error(traceback.format_exc())
 
+# Test Telegram connection
+def test_telegram_connection():
+    try:
+        import requests
+        response = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getMe")
+        logger.info(f"Telegram connection test: {response.status_code} - {response.text}")
+        return response.status_code == 200
+    except Exception as e:
+        logger.error(f"Telegram connection test failed: {e}")
+        return False
+
 # Call the synchronous version at startup
 set_webhook_sync()
 
+# Test connection
+if test_telegram_connection():
+    logger.info("Successfully connected to Telegram API")
+else:
+    logger.error("Failed to connect to Telegram API - check your network and token")
+
 if __name__ == '__main__':
-    # Run the Flask app
+    # Run the Quart app
     app.run(host='0.0.0.0', port=PORT) 
