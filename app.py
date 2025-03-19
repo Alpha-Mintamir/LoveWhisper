@@ -1,6 +1,7 @@
 from flask import Flask, request, Response
 import logging
 import os
+import asyncio
 from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, InlineQueryHandler
 import time
@@ -56,17 +57,25 @@ def index():
     return 'Bot is running!'
 
 # Setup webhook function
-def setup_webhook():
-    """Set up the webhook."""
+async def setup_webhook():
+    """Set up the webhook asynchronously."""
     url = f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}"
     bot = Bot(token=TELEGRAM_TOKEN)
-    bot.delete_webhook()
-    bot.set_webhook(url=url)
+    await bot.delete_webhook()
+    await bot.set_webhook(url=url)
     logger.info(f"Webhook set to {url}")
 
-# Call setup_webhook when the app starts
-with app.app_context():
-    setup_webhook()
+# Set up the webhook using the Telegram Bot API directly
+def set_webhook_sync():
+    """Set up webhook using requests (synchronous)."""
+    import requests
+    url = f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}"
+    api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={url}"
+    response = requests.get(api_url)
+    logger.info(f"Webhook set to {url}. Response: {response.text}")
+
+# Call the synchronous version at startup
+set_webhook_sync()
 
 if __name__ == '__main__':
     # Run the Flask app
