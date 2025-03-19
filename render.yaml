@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: telegram-boyfriend-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: WEBHOOK_URL
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false 
